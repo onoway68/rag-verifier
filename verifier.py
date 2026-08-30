@@ -1,4 +1,5 @@
-﻿import re
+import math
+import re
 from nli_provider import HuggingFaceNLIProvider
 
 
@@ -187,6 +188,74 @@ class RAGVerifier:
     # THRESHOLD-BASED NLI POLICY
     # --------------------------------------------------------
 
+    def validate_nli_scores(
+        self,
+        scores,
+        sum_tolerance=1e-3
+    ):
+        required_labels = {
+            "entailment",
+            "contradiction",
+            "neutral"
+        }
+
+        if not isinstance(scores, dict):
+            return {
+                "valid": False,
+                "reason": "NLI_PROVIDER_OUTPUT_NOT_DICT"
+            }
+
+        actual_labels = set(scores.keys())
+
+        if actual_labels != required_labels:
+            return {
+                "valid": False,
+                "reason": "NLI_PROVIDER_LABEL_CONTRACT_VIOLATION"
+            }
+
+        normalized = {}
+
+        for label in required_labels:
+            value = scores[label]
+
+            if isinstance(value, bool) or not isinstance(
+                value,
+                (int, float)
+            ):
+                return {
+                    "valid": False,
+                    "reason": "NLI_PROVIDER_SCORE_NOT_NUMERIC"
+                }
+
+            value = float(value)
+
+            if not math.isfinite(value):
+                return {
+                    "valid": False,
+                    "reason": "NLI_PROVIDER_SCORE_NOT_FINITE"
+                }
+
+            if not 0.0 <= value <= 1.0:
+                return {
+                    "valid": False,
+                    "reason": "NLI_PROVIDER_SCORE_OUT_OF_RANGE"
+                }
+
+            normalized[label] = value
+
+        total = sum(normalized.values())
+
+        if abs(total - 1.0) > sum_tolerance:
+            return {
+                "valid": False,
+                "reason": "NLI_PROVIDER_PROBABILITY_SUM_INVALID"
+            }
+
+        return {
+            "valid": True,
+            "scores": normalized
+        }
+
     def classify_nli_scores(self, scores):
 
         entailment = scores.get(
@@ -281,12 +350,26 @@ class RAGVerifier:
             claim
         )
 
+        validation = self.validate_nli_scores(
+            scores
+        )
+
+        if not validation["valid"]:
+            return {
+                "citation": citation_id,
+                "status": "FAIL",
+                "reason": validation["reason"],
+                "argmax_prediction": None,
+                "decision_label": None,
+                "probabilities": None
+            }
+
+        scores = validation["scores"]
+
         argmax_prediction = max(
             scores,
             key=scores.get
         )
-
-
         policy = self.classify_nli_scores(
             scores
         )

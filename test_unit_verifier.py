@@ -183,3 +183,156 @@ def test_exact_fail_boundary():
     )
 
     assert result["status"] == "FAIL"
+
+
+def test_provider_missing_label_fails_closed():
+    verifier, _ = make_verifier(
+        default_scores={
+            "entailment": 0.98,
+            "contradiction": 0.02
+        }
+    )
+
+    result = verifier.verify_answer(
+        "A heart attack occurs when blood flow is blocked. [mi-001]"
+    )
+
+    assert result["status"] == "FAIL"
+    assert result["trusted_release"] is False
+
+
+def test_provider_extra_label_fails_closed():
+    verifier, _ = make_verifier(
+        default_scores={
+            "entailment": 0.97,
+            "contradiction": 0.01,
+            "neutral": 0.01,
+            "unexpected": 0.01
+        }
+    )
+
+    result = verifier.verify_answer(
+        "A heart attack occurs when blood flow is blocked. [mi-001]"
+    )
+
+    assert result["status"] == "FAIL"
+    assert result["trusted_release"] is False
+
+
+def test_provider_nan_score_fails_closed():
+    verifier, _ = make_verifier(
+        default_scores={
+            "entailment": float("nan"),
+            "contradiction": 0.01,
+            "neutral": 0.99
+        }
+    )
+
+    result = verifier.verify_answer(
+        "A heart attack occurs when blood flow is blocked. [mi-001]"
+    )
+
+    assert result["status"] == "FAIL"
+    assert result["trusted_release"] is False
+
+
+def test_provider_infinite_score_fails_closed():
+    verifier, _ = make_verifier(
+        default_scores={
+            "entailment": float("inf"),
+            "contradiction": 0.0,
+            "neutral": 0.0
+        }
+    )
+
+    result = verifier.verify_answer(
+        "A heart attack occurs when blood flow is blocked. [mi-001]"
+    )
+
+    assert result["status"] == "FAIL"
+    assert result["trusted_release"] is False
+
+
+def test_provider_negative_score_fails_closed():
+    verifier, _ = make_verifier(
+        default_scores={
+            "entailment": 0.95,
+            "contradiction": -0.01,
+            "neutral": 0.06
+        }
+    )
+
+    result = verifier.verify_answer(
+        "A heart attack occurs when blood flow is blocked. [mi-001]"
+    )
+
+    assert result["status"] == "FAIL"
+    assert result["trusted_release"] is False
+
+
+def test_provider_score_above_one_fails_closed():
+    verifier, _ = make_verifier(
+        default_scores={
+            "entailment": 1.01,
+            "contradiction": 0.0,
+            "neutral": -0.01
+        }
+    )
+
+    result = verifier.verify_answer(
+        "A heart attack occurs when blood flow is blocked. [mi-001]"
+    )
+
+    assert result["status"] == "FAIL"
+    assert result["trusted_release"] is False
+
+
+def test_provider_non_numeric_score_fails_closed():
+    verifier, _ = make_verifier(
+        default_scores={
+            "entailment": "0.98",
+            "contradiction": 0.01,
+            "neutral": 0.01
+        }
+    )
+
+    result = verifier.verify_answer(
+        "A heart attack occurs when blood flow is blocked. [mi-001]"
+    )
+
+    assert result["status"] == "FAIL"
+    assert result["trusted_release"] is False
+
+
+def test_provider_invalid_probability_sum_fails_closed():
+    verifier, _ = make_verifier(
+        default_scores={
+            "entailment": 0.80,
+            "contradiction": 0.10,
+            "neutral": 0.05
+        }
+    )
+
+    result = verifier.verify_answer(
+        "A heart attack occurs when blood flow is blocked. [mi-001]"
+    )
+
+    assert result["status"] == "FAIL"
+    assert result["trusted_release"] is False
+
+
+def test_provider_valid_probability_sum_is_accepted():
+    verifier, _ = make_verifier(
+        default_scores={
+            "entailment": 0.98,
+            "contradiction": 0.01,
+            "neutral": 0.01
+        }
+    )
+
+    result = verifier.verify_answer(
+        "A heart attack occurs when blood flow is blocked. [mi-001]"
+    )
+
+    assert result["status"] == "PASS"
+    assert result["trusted_release"] is True
