@@ -18,11 +18,20 @@ class FakeEmbeddingProvider:
 class SentenceTransformerEmbeddingProvider:
     def __init__(
         self,
-        model_id="sentence-transformers/all-MiniLM-L6-v2"
+        model_id=(
+            "sentence-transformers/"
+            "all-MiniLM-L6-v2"
+        ),
+        revision=None
     ):
-        from sentence_transformers import SentenceTransformer
+        from sentence_transformers import (
+            SentenceTransformer
+        )
 
-        self.model = SentenceTransformer(model_id)
+        self.model = SentenceTransformer(
+            model_id,
+            revision=revision
+        )
 
     def encode(self, texts):
         if isinstance(texts, str):
