@@ -10,6 +10,66 @@ class Retriever:
         self.chunks = chunks
         self.embedding_provider = embedding_provider
 
+    def validate_embedding_batch(
+        self,
+        embeddings,
+        expected_count
+    ):
+        if not isinstance(
+            embeddings,
+            list
+        ):
+            raise ValueError(
+                "Embedding provider output must be a list"
+            )
+
+        if len(embeddings) != expected_count:
+            raise ValueError(
+                "Embedding provider returned an unexpected number of vectors"
+            )
+
+        expected_dimension = None
+
+        for vector in embeddings:
+            if not isinstance(
+                vector,
+                list
+            ):
+                raise ValueError(
+                    "Each embedding vector must be a list"
+                )
+
+            if len(vector) == 0:
+                raise ValueError(
+                    "Embedding vectors must not be empty"
+                )
+
+            if expected_dimension is None:
+                expected_dimension = len(vector)
+            elif len(vector) != expected_dimension:
+                raise ValueError(
+                    "Embedding vectors must have consistent dimensions"
+                )
+
+            for value in vector:
+                if (
+                    isinstance(value, bool)
+                    or not isinstance(
+                        value,
+                        (int, float)
+                    )
+                ):
+                    raise ValueError(
+                        "Embedding values must be numeric"
+                    )
+
+                if not math.isfinite(value):
+                    raise ValueError(
+                        "Embedding values must be finite"
+                    )
+
+        return embeddings
+
     def cosine_similarity(
         self,
         vector_a,
@@ -69,17 +129,40 @@ class Retriever:
             for chunk_id in chunk_ids
         ]
 
-        query_vector = (
+        query_vectors = (
             self.embedding_provider.encode(
                 [query]
-            )[0]
+            )
         )
+
+        self.validate_embedding_batch(
+            query_vectors,
+            expected_count=1
+        )
+
+        query_vector = query_vectors[0]
 
         chunk_vectors = (
             self.embedding_provider.encode(
                 chunk_texts
             )
         )
+
+        self.validate_embedding_batch(
+            chunk_vectors,
+            expected_count=len(
+                chunk_texts
+            )
+        )
+
+        for chunk_vector in chunk_vectors:
+            if (
+                len(chunk_vector)
+                != len(query_vector)
+            ):
+                raise ValueError(
+                    "Query and chunk embeddings must have the same dimension"
+                )
 
         results = []
 
