@@ -3,6 +3,13 @@ import pytest
 from embedding_provider import FakeEmbeddingProvider
 from retriever import Retriever
 
+class StubEmbeddingProvider:
+    def __init__(self, outputs):
+        self.outputs = list(outputs)
+
+    def encode(self, texts):
+        return self.outputs.pop(0)
+
 
 def make_retriever():
     chunks = {
@@ -149,3 +156,200 @@ def test_real_embedding_provider_retrieves_relevant_chunk():
     )
 
     assert results[0]["chunk_id"] == "mi-001"
+
+def make_stub_retriever(outputs):
+    return Retriever(
+        chunks={
+            "c1": "First chunk.",
+            "c2": "Second chunk."
+        },
+        embedding_provider=StubEmbeddingProvider(
+            outputs
+        )
+    )
+
+
+def test_provider_returning_too_few_chunk_vectors_is_rejected():
+    retriever = make_stub_retriever(
+        outputs=[
+            [[1.0, 0.0]],
+            [[1.0, 0.0]]
+        ]
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="unexpected number of vectors"
+    ):
+        retriever.retrieve("query")
+
+
+def test_provider_returning_too_many_chunk_vectors_is_rejected():
+    retriever = make_stub_retriever(
+        outputs=[
+            [[1.0, 0.0]],
+            [
+                [1.0, 0.0],
+                [0.0, 1.0],
+                [0.5, 0.5]
+            ]
+        ]
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="unexpected number of vectors"
+    ):
+        retriever.retrieve("query")
+
+
+def test_provider_returning_no_query_vector_is_rejected():
+    retriever = make_stub_retriever(
+        outputs=[
+            [],
+            [
+                [1.0, 0.0],
+                [0.0, 1.0]
+            ]
+        ]
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="unexpected number of vectors"
+    ):
+        retriever.retrieve("query")
+
+
+def test_provider_returning_inconsistent_chunk_dimensions_is_rejected():
+    retriever = make_stub_retriever(
+        outputs=[
+            [[1.0, 0.0]],
+            [
+                [1.0, 0.0],
+                [0.0, 1.0, 0.0]
+            ]
+        ]
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="consistent dimensions"
+    ):
+        retriever.retrieve("query")
+
+
+def test_query_and_chunk_dimension_mismatch_is_rejected():
+    retriever = make_stub_retriever(
+        outputs=[
+            [[1.0, 0.0]],
+            [
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0]
+            ]
+        ]
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Query and chunk embeddings must have the same dimension"
+    ):
+        retriever.retrieve("query")
+
+
+@pytest.mark.parametrize(
+    "invalid_value",
+    [
+        "1.0",
+        None,
+        True
+    ]
+)
+def test_provider_returning_nonnumeric_embedding_value_is_rejected(
+    invalid_value
+):
+    retriever = make_stub_retriever(
+        outputs=[
+            [[1.0, 0.0]],
+            [
+                [invalid_value, 0.0],
+                [0.0, 1.0]
+            ]
+        ]
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Embedding values must be numeric"
+    ):
+        retriever.retrieve("query")
+
+
+@pytest.mark.parametrize(
+    "invalid_value",
+    [
+        float("nan"),
+        float("inf"),
+        float("-inf")
+    ]
+)
+def test_provider_returning_nonfinite_embedding_value_is_rejected(
+    invalid_value
+):
+    retriever = make_stub_retriever(
+        outputs=[
+            [[1.0, 0.0]],
+            [
+                [invalid_value, 0.0],
+                [0.0, 1.0]
+            ]
+        ]
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Embedding values must be finite"
+    ):
+        retriever.retrieve("query")
+
+
+def test_provider_returning_nonlist_batch_is_rejected():
+    retriever = make_stub_retriever(
+        outputs=[
+            (1.0, 0.0)
+        ]
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Embedding provider output must be a list"
+    ):
+        retriever.retrieve("query")
+
+
+def test_provider_returning_nonlist_vector_is_rejected():
+    retriever = make_stub_retriever(
+        outputs=[
+            [(1.0, 0.0)]
+        ]
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Each embedding vector must be a list"
+    ):
+        retriever.retrieve("query")
+
+
+def test_provider_returning_empty_vector_is_rejected():
+    retriever = make_stub_retriever(
+        outputs=[
+            [[]]
+        ]
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Embedding vectors must not be empty"
+    ):
+        retriever.retrieve("query")
