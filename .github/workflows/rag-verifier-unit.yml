@@ -31,6 +31,8 @@ jobs:
 
           from verifier import RAGVerifier
           from nli_provider import FakeNLIProvider
+          from embedding_provider import FakeEmbeddingProvider
+          from retriever import Retriever
 
           verifier = RAGVerifier(
               chunks={"x": "Evidence."},
@@ -38,12 +40,28 @@ jobs:
               nli_provider=FakeNLIProvider()
           )
 
+          retriever = Retriever(
+              chunks={"x": "Evidence."},
+              embedding_provider=FakeEmbeddingProvider(
+                  {
+                      "question": [1.0, 0.0],
+                      "Evidence.": [1.0, 0.0]
+                  }
+              )
+          )
+
+          retriever.retrieve("question")
+
           assert "torch" not in sys.modules
           assert "transformers" not in sys.modules
+          assert "sentence_transformers" not in sys.modules
 
-          print("Deterministic verifier is ML-runtime independent.")
+          print(
+              "Deterministic verifier and retriever "
+              "are ML-runtime independent."
+          )
           PY
 
-      - name: Run deterministic verifier gate
+      - name: Run deterministic RAG gate
         run: |
           python -m pytest -m "not integration" -v
