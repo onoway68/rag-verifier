@@ -231,6 +231,7 @@ def test_empty_evidence_produces_empty_context():
     assert result == {
         "context": "",
         "evidence": [],
+        "citation_map": {},
         "word_count": 0,
         "max_words": 100
     }
@@ -488,3 +489,52 @@ def test_oversized_evidence_is_not_truncated():
     assert result["evidence"] == []
     assert result["word_count"] == 0
     assert result["max_words"] == 3
+
+
+def test_build_returns_citation_map():
+    builder = ContextBuilder(
+        max_words=100
+    )
+
+    result = builder.build(
+        [
+            make_evidence(
+                chunk_id="diabetes-001",
+                text=(
+                    "Diabetes can cause "
+                    "retinopathy and neuropathy."
+                )
+            ),
+            make_evidence(
+                chunk_id="hypertension-001",
+                text=(
+                    "Hypertension can cause "
+                    "cardiovascular complications."
+                )
+            )
+        ]
+    )
+
+    assert result["citation_map"] == {
+        "C1": (
+            "Diabetes can cause "
+            "retinopathy and neuropathy."
+        ),
+        "C2": (
+            "Hypertension can cause "
+            "cardiovascular complications."
+        )
+    }
+
+    empty_result = ContextBuilder(
+        max_words=2
+    ).build(
+        [
+            make_evidence(
+                chunk_id="oversized-001",
+                text="one two three"
+            )
+        ]
+    )
+
+    assert empty_result["citation_map"] == {}

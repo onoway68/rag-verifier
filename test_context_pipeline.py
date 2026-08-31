@@ -115,6 +115,11 @@ def test_retrieval_reranking_context_pipeline():
         + hypertension_text
     )
 
+    assert result["citation_map"] == {
+        "C1": diabetes_text,
+        "C2": hypertension_text
+    }
+
     diabetes = result["evidence"][0]
 
     assert (

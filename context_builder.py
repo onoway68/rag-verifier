@@ -154,6 +154,10 @@ class ContextBuilder:
         return {
             "context": context_text,
             "evidence": selected,
+            "citation_map": {
+                item["citation_id"]: item["text"]
+                for item in selected
+            },
             "word_count": words_used,
             "max_words": self.max_words
         }
