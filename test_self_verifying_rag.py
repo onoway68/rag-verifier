@@ -1052,3 +1052,27 @@ def test_verifier_factory_receives_exact_request_contract():
     }
 
     assert result["trusted_release"] is True
+
+
+@pytest.mark.parametrize(
+    "invalid_question",
+    [
+        None,
+        123,
+        "",
+        "   "
+    ]
+)
+def test_run_rejects_invalid_question(invalid_question):
+    pipeline, _, _ = build_pipeline(
+        (
+            "Hypertension is characterized by "
+            "persistently elevated blood pressure. [C1]"
+        )
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="question must be a non-empty string"
+    ):
+        pipeline.run(invalid_question)
