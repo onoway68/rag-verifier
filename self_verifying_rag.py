@@ -32,6 +32,69 @@ class SelfVerifyingRAG:
                 "rerank_k must not exceed retrieval_k"
             )
 
+        dependencies = (
+            ("retriever", retriever, "retrieve"),
+            ("reranker", reranker, "rerank"),
+            (
+                "context_builder",
+                context_builder,
+                "build"
+            ),
+            ("generator", generator, "generate"),
+            (
+                "nli_provider",
+                nli_provider,
+                "predict"
+            )
+        )
+
+        for name, dependency, method_name in dependencies:
+            if dependency is None:
+                raise ValueError(
+                    f"{name} must not be None"
+                )
+
+            method = getattr(
+                dependency,
+                method_name,
+                None
+            )
+
+            if not callable(method):
+                raise ValueError(
+                    f"{name} must provide callable "
+                    f"{method_name}()"
+                )
+
+        for name, value in (
+            ("pass_threshold", pass_threshold),
+            ("fail_threshold", fail_threshold)
+        ):
+            if (
+                isinstance(value, bool)
+                or not isinstance(
+                    value,
+                    (int, float)
+                )
+            ):
+                raise ValueError(
+                    f"{name} must be numeric"
+                )
+
+            value = float(value)
+
+            if not 0.0 <= value <= 1.0:
+                raise ValueError(
+                    f"{name} must be between 0 and 1"
+                )
+
+        pass_threshold = float(
+            pass_threshold
+        )
+        fail_threshold = float(
+            fail_threshold
+        )
+
         self.retriever = retriever
         self.reranker = reranker
         self.context_builder = context_builder
