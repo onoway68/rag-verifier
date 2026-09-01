@@ -244,6 +244,14 @@ class SelfVerifyingRAG:
         self,
         question
     ):
+        if (
+            not isinstance(question, str)
+            or not question.strip()
+        ):
+            raise ValueError(
+                "question must be a non-empty string"
+            )
+
         candidates = self.retriever.retrieve(
             question,
             top_k=self.retrieval_k
