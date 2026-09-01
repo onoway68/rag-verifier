@@ -782,3 +782,212 @@ def test_generator_answer_must_be_string():
         )
     ):
         pipeline.run(question)
+
+
+class StubVerifier:
+    def __init__(self, output):
+        self.output = output
+
+    def verify_answer(self, answer):
+        return self.output
+
+
+class StubVerifierFactory:
+    def __init__(self, output):
+        self.output = output
+
+    def __call__(self, **kwargs):
+        return StubVerifier(self.output)
+
+
+def test_verifier_output_must_be_dict():
+    pipeline, question, _ = build_pipeline(
+        "Supported answer. [C1]"
+    )
+
+    pipeline.verifier_factory = StubVerifierFactory(
+        None
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="verifier output must be a dict"
+    ):
+        pipeline.run(question)
+
+
+@pytest.mark.parametrize(
+    "missing_key",
+    [
+        "status",
+        "trusted_release"
+    ]
+)
+def test_verifier_output_requires_keys(
+    missing_key
+):
+    pipeline, question, _ = build_pipeline(
+        "Supported answer. [C1]"
+    )
+
+    output = {
+        "status": "PASS",
+        "trusted_release": True
+    }
+
+    del output[missing_key]
+
+    pipeline.verifier_factory = StubVerifierFactory(
+        output
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            f"verifier output must contain "
+            f"{missing_key}"
+        )
+    ):
+        pipeline.run(question)
+
+
+def test_verifier_status_must_be_valid():
+    pipeline, question, _ = build_pipeline(
+        "Supported answer. [C1]"
+    )
+
+    pipeline.verifier_factory = StubVerifierFactory(
+        {
+            "status": "UNKNOWN",
+            "trusted_release": False
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "verifier status must be "
+            "PASS, REVIEW, or FAIL"
+        )
+    ):
+        pipeline.run(question)
+
+
+def test_verifier_trusted_release_must_be_bool():
+    pipeline, question, _ = build_pipeline(
+        "Supported answer. [C1]"
+    )
+
+    pipeline.verifier_factory = StubVerifierFactory(
+        {
+            "status": "PASS",
+            "trusted_release": 1
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "verifier trusted_release "
+            "must be a bool"
+        )
+    ):
+        pipeline.run(question)
+
+
+@pytest.mark.parametrize(
+    "status,trusted_release",
+    [
+        ("PASS", False),
+        ("REVIEW", True),
+        ("FAIL", True)
+    ]
+)
+def test_verifier_status_and_trusted_release_must_be_consistent(
+    status,
+    trusted_release
+):
+    pipeline, question, _ = build_pipeline(
+        "Supported answer. [C1]"
+    )
+
+    pipeline.verifier_factory = StubVerifierFactory(
+        {
+            "status": status,
+            "trusted_release": trusted_release
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "verifier status and trusted_release "
+            "are inconsistent"
+        )
+    ):
+        pipeline.run(question)
+
+
+def test_verifier_factory_must_not_be_none():
+    pipeline, _, _ = build_pipeline(
+        "Supported answer. [C1]"
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="verifier_factory must not be None"
+    ):
+        SelfVerifyingRAG(
+            retriever=pipeline.retriever,
+            reranker=pipeline.reranker,
+            context_builder=pipeline.context_builder,
+            generator=pipeline.generator,
+            nli_provider=pipeline.nli_provider,
+            retrieval_k=pipeline.retrieval_k,
+            rerank_k=pipeline.rerank_k,
+            pass_threshold=pipeline.pass_threshold,
+            fail_threshold=pipeline.fail_threshold,
+            verifier_factory=None
+        )
+
+
+def test_verifier_factory_must_be_callable():
+    pipeline, _, _ = build_pipeline(
+        "Supported answer. [C1]"
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="verifier_factory must be callable"
+    ):
+        SelfVerifyingRAG(
+            retriever=pipeline.retriever,
+            reranker=pipeline.reranker,
+            context_builder=pipeline.context_builder,
+            generator=pipeline.generator,
+            nli_provider=pipeline.nli_provider,
+            retrieval_k=pipeline.retrieval_k,
+            rerank_k=pipeline.rerank_k,
+            pass_threshold=pipeline.pass_threshold,
+            fail_threshold=pipeline.fail_threshold,
+            verifier_factory=42
+        )
+
+
+def test_verifier_factory_result_must_provide_verify_answer():
+    pipeline, question, _ = build_pipeline(
+        "Supported answer. [C1]"
+    )
+
+    pipeline.verifier_factory = (
+        lambda **kwargs: object()
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "verifier_factory must return an object "
+            "with callable verify_answer"
+        )
+    ):
+        pipeline.run(question)

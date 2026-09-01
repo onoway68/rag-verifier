@@ -12,7 +12,8 @@ class SelfVerifyingRAG:
         retrieval_k=5,
         rerank_k=3,
         pass_threshold=0.90,
-        fail_threshold=0.90
+        fail_threshold=0.90,
+        verifier_factory=RAGVerifier
     ):
         for name, value in (
             ("retrieval_k", retrieval_k),
@@ -101,6 +102,18 @@ class SelfVerifyingRAG:
         self.generator = generator
         self.nli_provider = nli_provider
 
+        if verifier_factory is None:
+            raise ValueError(
+                "verifier_factory must not be None"
+            )
+
+        if not callable(verifier_factory):
+            raise ValueError(
+                "verifier_factory must be callable"
+            )
+
+        self.verifier_factory = verifier_factory
+
         self.retrieval_k = retrieval_k
         self.rerank_k = rerank_k
 
@@ -176,6 +189,57 @@ class SelfVerifyingRAG:
                 "generator answer must be a string"
             )
 
+    @staticmethod
+    def _validate_verifier_output(output):
+        if not isinstance(output, dict):
+            raise ValueError(
+                "verifier output must be a dict"
+            )
+
+        for key in (
+            "status",
+            "trusted_release"
+        ):
+            if key not in output:
+                raise ValueError(
+                    "verifier output "
+                    f"must contain {key}"
+                )
+
+        status = output["status"]
+        trusted_release = output[
+            "trusted_release"
+        ]
+
+        if status not in (
+            "PASS",
+            "REVIEW",
+            "FAIL"
+        ):
+            raise ValueError(
+                "verifier status must be "
+                "PASS, REVIEW, or FAIL"
+            )
+
+        if not isinstance(
+            trusted_release,
+            bool
+        ):
+            raise ValueError(
+                "verifier trusted_release "
+                "must be a bool"
+            )
+
+        expected_release = (
+            status == "PASS"
+        )
+
+        if trusted_release != expected_release:
+            raise ValueError(
+                "verifier status and trusted_release "
+                "are inconsistent"
+            )
+
     def run(
         self,
         question
@@ -231,7 +295,7 @@ class SelfVerifyingRAG:
             ]
         )
 
-        verifier = RAGVerifier(
+        verifier = self.verifier_factory(
             chunks=citation_map,
             retrieved_ids=(
                 citation_map.keys()
@@ -247,12 +311,28 @@ class SelfVerifyingRAG:
             )
         )
 
+        verify_answer = getattr(
+            verifier,
+            "verify_answer",
+            None
+        )
+
+        if not callable(verify_answer):
+            raise ValueError(
+                "verifier_factory must return an object "
+                "with callable verify_answer"
+            )
+
         verification = (
-            verifier.verify_answer(
+            verify_answer(
                 generation_result[
                     "answer"
                 ]
             )
+        )
+
+        self._validate_verifier_output(
+            verification
         )
 
         return {
