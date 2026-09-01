@@ -991,3 +991,64 @@ def test_verifier_factory_result_must_provide_verify_answer():
         )
     ):
         pipeline.run(question)
+
+
+class RecordingVerifierFactory:
+    def __init__(self, output):
+        self.output = output
+        self.calls = []
+
+    def __call__(self, **kwargs):
+        self.calls.append(kwargs)
+        return StubVerifier(self.output)
+
+
+def test_verifier_factory_receives_exact_request_contract():
+    pipeline, question, chunks = build_pipeline(
+        (
+            "Hypertension is characterized by "
+            "persistently elevated blood pressure. [C1]"
+        )
+    )
+
+    factory = RecordingVerifierFactory(
+        {
+            "status": "PASS",
+            "trusted_release": True
+        }
+    )
+
+    pipeline.verifier_factory = factory
+    pipeline.pass_threshold = 0.91
+    pipeline.fail_threshold = 0.87
+
+    result = pipeline.run(question)
+
+    assert len(factory.calls) == 1
+
+    call = factory.calls[0]
+
+    expected_citation_map = {
+        "C1": chunks["hypertension-001"]
+    }
+
+    assert call["chunks"] == expected_citation_map
+    assert list(call["retrieved_ids"]) == ["C1"]
+
+    assert call["pass_threshold"] == 0.91
+    assert call["fail_threshold"] == 0.87
+
+    assert (
+        call["nli_provider"]
+        is pipeline.nli_provider
+    )
+
+    assert set(call) == {
+        "chunks",
+        "retrieved_ids",
+        "pass_threshold",
+        "fail_threshold",
+        "nli_provider"
+    }
+
+    assert result["trusted_release"] is True
