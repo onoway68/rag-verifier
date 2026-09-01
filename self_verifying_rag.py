@@ -107,6 +107,75 @@ class SelfVerifyingRAG:
         self.pass_threshold = pass_threshold
         self.fail_threshold = fail_threshold
 
+    @staticmethod
+    def _validate_retriever_output(output):
+        if not isinstance(output, list):
+            raise ValueError(
+                "retriever output must be a list"
+            )
+
+    @staticmethod
+    def _validate_reranker_output(output):
+        if not isinstance(output, list):
+            raise ValueError(
+                "reranker output must be a list"
+            )
+
+    @staticmethod
+    def _validate_context_builder_output(output):
+        if not isinstance(output, dict):
+            raise ValueError(
+                "context_builder output must be a dict"
+            )
+
+        for key in (
+            "context",
+            "citation_map"
+        ):
+            if key not in output:
+                raise ValueError(
+                    "context_builder output "
+                    f"must contain {key}"
+                )
+
+        if not isinstance(
+            output["context"],
+            str
+        ):
+            raise ValueError(
+                "context_builder context "
+                "must be a string"
+            )
+
+        if not isinstance(
+            output["citation_map"],
+            dict
+        ):
+            raise ValueError(
+                "context_builder citation_map "
+                "must be a dict"
+            )
+
+    @staticmethod
+    def _validate_generator_output(output):
+        if not isinstance(output, dict):
+            raise ValueError(
+                "generator output must be a dict"
+            )
+
+        if "answer" not in output:
+            raise ValueError(
+                "generator output must contain answer"
+            )
+
+        if not isinstance(
+            output["answer"],
+            str
+        ):
+            raise ValueError(
+                "generator answer must be a string"
+            )
+
     def run(
         self,
         question
@@ -116,16 +185,28 @@ class SelfVerifyingRAG:
             top_k=self.retrieval_k
         )
 
+        self._validate_retriever_output(
+            candidates
+        )
+
         reranked = self.reranker.rerank(
             question,
             candidates,
             top_k=self.rerank_k
         )
 
+        self._validate_reranker_output(
+            reranked
+        )
+
         context_result = (
             self.context_builder.build(
                 reranked
             )
+        )
+
+        self._validate_context_builder_output(
+            context_result
         )
 
         generation_result = (
@@ -138,6 +219,10 @@ class SelfVerifyingRAG:
                     ]
                 )
             )
+        )
+
+        self._validate_generator_output(
+            generation_result
         )
 
         citation_map = (

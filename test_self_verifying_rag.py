@@ -533,3 +533,252 @@ def test_valid_threshold_boundaries_are_accepted(
     assert hardened_pipeline.fail_threshold == float(
         threshold
     )
+
+
+class StubRetriever:
+    def __init__(self, output):
+        self.output = output
+
+    def retrieve(self, question, top_k):
+        return self.output
+
+
+class StubReranker:
+    def __init__(self, output):
+        self.output = output
+
+    def rerank(self, question, candidates, top_k):
+        return self.output
+
+
+class StubContextBuilder:
+    def __init__(self, output):
+        self.output = output
+
+    def build(self, reranked):
+        return self.output
+
+
+class StubGenerator:
+    def __init__(self, output):
+        self.output = output
+
+    def generate(
+        self,
+        question,
+        context,
+        citation_map
+    ):
+        return self.output
+
+
+def test_retriever_output_must_be_list():
+    pipeline, question, _ = build_pipeline(
+        "Supported answer. [C1]"
+    )
+
+    pipeline.retriever = StubRetriever(
+        None
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="retriever output must be a list"
+    ):
+        pipeline.run(question)
+
+
+def test_reranker_output_must_be_list():
+    pipeline, question, _ = build_pipeline(
+        "Supported answer. [C1]"
+    )
+
+    pipeline.reranker = StubReranker(
+        None
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="reranker output must be a list"
+    ):
+        pipeline.run(question)
+
+
+@pytest.mark.parametrize(
+    "invalid_output",
+    [
+        None,
+        [],
+        "invalid"
+    ]
+)
+def test_context_builder_output_must_be_dict(
+    invalid_output
+):
+    pipeline, question, _ = build_pipeline(
+        "Supported answer. [C1]"
+    )
+
+    pipeline.context_builder = (
+        StubContextBuilder(
+            invalid_output
+        )
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "context_builder output "
+            "must be a dict"
+        )
+    ):
+        pipeline.run(question)
+
+
+@pytest.mark.parametrize(
+    "missing_key",
+    [
+        "context",
+        "citation_map"
+    ]
+)
+def test_context_builder_output_requires_keys(
+    missing_key
+):
+    pipeline, question, _ = build_pipeline(
+        "Supported answer. [C1]"
+    )
+
+    output = {
+        "context": "Evidence [C1]",
+        "citation_map": {
+            "C1": "Evidence"
+        }
+    }
+
+    del output[missing_key]
+
+    pipeline.context_builder = (
+        StubContextBuilder(output)
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            f"context_builder output "
+            f"must contain {missing_key}"
+        )
+    ):
+        pipeline.run(question)
+
+
+def test_context_builder_context_must_be_string():
+    pipeline, question, _ = build_pipeline(
+        "Supported answer. [C1]"
+    )
+
+    pipeline.context_builder = (
+        StubContextBuilder(
+            {
+                "context": None,
+                "citation_map": {
+                    "C1": "Evidence"
+                }
+            }
+        )
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "context_builder context "
+            "must be a string"
+        )
+    ):
+        pipeline.run(question)
+
+
+def test_context_builder_citation_map_must_be_dict():
+    pipeline, question, _ = build_pipeline(
+        "Supported answer. [C1]"
+    )
+
+    pipeline.context_builder = (
+        StubContextBuilder(
+            {
+                "context": "Evidence [C1]",
+                "citation_map": None
+            }
+        )
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "context_builder citation_map "
+            "must be a dict"
+        )
+    ):
+        pipeline.run(question)
+
+
+@pytest.mark.parametrize(
+    "invalid_output",
+    [
+        None,
+        [],
+        "invalid"
+    ]
+)
+def test_generator_output_must_be_dict(
+    invalid_output
+):
+    pipeline, question, _ = build_pipeline(
+        "Supported answer. [C1]"
+    )
+
+    pipeline.generator = StubGenerator(
+        invalid_output
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="generator output must be a dict"
+    ):
+        pipeline.run(question)
+
+
+def test_generator_output_requires_answer():
+    pipeline, question, _ = build_pipeline(
+        "Supported answer. [C1]"
+    )
+
+    pipeline.generator = StubGenerator({})
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "generator output must contain answer"
+        )
+    ):
+        pipeline.run(question)
+
+
+def test_generator_answer_must_be_string():
+    pipeline, question, _ = build_pipeline(
+        "Supported answer. [C1]"
+    )
+
+    pipeline.generator = StubGenerator(
+        {
+            "answer": None
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "generator answer must be a string"
+        )
+    ):
+        pipeline.run(question)
