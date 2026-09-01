@@ -7,7 +7,10 @@ from nli_provider import FakeNLIProvider
 from reranker import Reranker
 from reranker_provider import FakeRerankerProvider
 from retriever import Retriever
-from self_verifying_rag import SelfVerifyingRAG
+from self_verifying_rag import (
+    OrchestratorStageError,
+    SelfVerifyingRAG
+)
 
 
 def build_pipeline(answer):
@@ -1076,3 +1079,187 @@ def test_run_rejects_invalid_question(invalid_question):
         match="question must be a non-empty string"
     ):
         pipeline.run(invalid_question)
+
+
+class RaisingRetriever:
+    def retrieve(self, question, top_k):
+        raise RuntimeError("retriever exploded")
+
+
+class RaisingReranker:
+    def rerank(self, question, candidates, top_k):
+        raise RuntimeError("reranker exploded")
+
+
+class RaisingContextBuilder:
+    def build(self, reranked):
+        raise RuntimeError("context builder exploded")
+
+
+class RaisingGenerator:
+    def generate(self, question, context, citation_map):
+        raise RuntimeError("generator exploded")
+
+
+class RaisingVerifier:
+    def verify_answer(self, answer):
+        raise RuntimeError("verifier exploded")
+
+
+class RaisingVerifierFactory:
+    def __call__(self, **kwargs):
+        return RaisingVerifier()
+
+
+def test_run_wraps_retriever_exception():
+    pipeline, question, _ = build_pipeline(
+        (
+            "Hypertension is characterized by "
+            "persistently elevated blood pressure. [C1]"
+        )
+    )
+
+    pipeline.retriever = RaisingRetriever()
+
+    with pytest.raises(
+        OrchestratorStageError,
+        match="retriever stage failed"
+    ) as exc_info:
+        pipeline.run(question)
+
+    assert exc_info.value.stage == "retriever"
+    assert isinstance(
+        exc_info.value.__cause__,
+        RuntimeError
+    )
+    assert str(
+        exc_info.value.__cause__
+    ) == "retriever exploded"
+
+
+def test_run_wraps_reranker_exception():
+    pipeline, question, _ = build_pipeline(
+        (
+            "Hypertension is characterized by "
+            "persistently elevated blood pressure. [C1]"
+        )
+    )
+
+    pipeline.reranker = RaisingReranker()
+
+    with pytest.raises(
+        OrchestratorStageError,
+        match="reranker stage failed"
+    ) as exc_info:
+        pipeline.run(question)
+
+    assert exc_info.value.stage == "reranker"
+    assert isinstance(
+        exc_info.value.__cause__,
+        RuntimeError
+    )
+
+
+def test_run_wraps_context_builder_exception():
+    pipeline, question, _ = build_pipeline(
+        (
+            "Hypertension is characterized by "
+            "persistently elevated blood pressure. [C1]"
+        )
+    )
+
+    pipeline.context_builder = RaisingContextBuilder()
+
+    with pytest.raises(
+        OrchestratorStageError,
+        match="context_builder stage failed"
+    ) as exc_info:
+        pipeline.run(question)
+
+    assert exc_info.value.stage == "context_builder"
+    assert isinstance(
+        exc_info.value.__cause__,
+        RuntimeError
+    )
+
+
+def test_run_wraps_generator_exception():
+    pipeline, question, _ = build_pipeline(
+        (
+            "Hypertension is characterized by "
+            "persistently elevated blood pressure. [C1]"
+        )
+    )
+
+    pipeline.generator = RaisingGenerator()
+
+    with pytest.raises(
+        OrchestratorStageError,
+        match="generator stage failed"
+    ) as exc_info:
+        pipeline.run(question)
+
+    assert exc_info.value.stage == "generator"
+    assert isinstance(
+        exc_info.value.__cause__,
+        RuntimeError
+    )
+
+
+def test_run_wraps_verifier_exception():
+    pipeline, question, _ = build_pipeline(
+        (
+            "Hypertension is characterized by "
+            "persistently elevated blood pressure. [C1]"
+        )
+    )
+
+    pipeline.verifier_factory = RaisingVerifierFactory()
+
+    with pytest.raises(
+        OrchestratorStageError,
+        match="verifier stage failed"
+    ) as exc_info:
+        pipeline.run(question)
+
+    assert exc_info.value.stage == "verifier"
+    assert isinstance(
+        exc_info.value.__cause__,
+        RuntimeError
+    )
+    assert str(
+        exc_info.value.__cause__
+    ) == "verifier exploded"
+
+
+class RaisingVerifierFactoryOnConstruction:
+    def __call__(self, **kwargs):
+        raise RuntimeError("verifier construction exploded")
+
+
+def test_run_wraps_verifier_factory_exception():
+    pipeline, question, _ = build_pipeline(
+        (
+            "Hypertension is characterized by "
+            "persistently elevated blood pressure. [C1]"
+        )
+    )
+
+    pipeline.verifier_factory = (
+        RaisingVerifierFactoryOnConstruction()
+    )
+
+    with pytest.raises(
+        OrchestratorStageError,
+        match="verifier stage failed"
+    ) as exc_info:
+        pipeline.run(question)
+
+    assert exc_info.value.stage == "verifier"
+    assert isinstance(
+        exc_info.value.__cause__,
+        RuntimeError
+    )
+    assert str(
+        exc_info.value.__cause__
+    ) == "verifier construction exploded"
