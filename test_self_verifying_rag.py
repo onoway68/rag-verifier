@@ -1,3 +1,4 @@
+import pytest
 from context_builder import ContextBuilder
 from embedding_provider import FakeEmbeddingProvider
 from generator import CitationAwareGenerator
@@ -324,3 +325,211 @@ def test_rerank_k_cannot_exceed_retrieval_k():
         raise AssertionError(
             "rerank_k > retrieval_k was not rejected"
         )
+
+
+
+def test_none_dependencies_are_rejected():
+    pipeline, _, _ = build_pipeline(
+        "Hypertension is associated with persistently "
+        "elevated blood pressure [C1]."
+    )
+
+    dependencies = (
+        "retriever",
+        "reranker",
+        "context_builder",
+        "generator",
+        "nli_provider"
+    )
+
+    for dependency_name in dependencies:
+        kwargs = {
+            "retriever": pipeline.retriever,
+            "reranker": pipeline.reranker,
+            "context_builder": pipeline.context_builder,
+            "generator": pipeline.generator,
+            "nli_provider": pipeline.nli_provider
+        }
+
+        kwargs[dependency_name] = None
+
+        with pytest.raises(
+            ValueError,
+            match=(
+                f"{dependency_name} must not be None"
+            )
+        ):
+            SelfVerifyingRAG(
+                **kwargs,
+                retrieval_k=2,
+                rerank_k=1
+            )
+
+
+def test_dependencies_must_provide_required_methods():
+    pipeline, _, _ = build_pipeline(
+        "Hypertension is associated with persistently "
+        "elevated blood pressure [C1]."
+    )
+
+    dependency_contracts = (
+        ("retriever", "retrieve"),
+        ("reranker", "rerank"),
+        ("context_builder", "build"),
+        ("generator", "generate"),
+        ("nli_provider", "predict")
+    )
+
+    for dependency_name, method_name in dependency_contracts:
+        kwargs = {
+            "retriever": pipeline.retriever,
+            "reranker": pipeline.reranker,
+            "context_builder": pipeline.context_builder,
+            "generator": pipeline.generator,
+            "nli_provider": pipeline.nli_provider
+        }
+
+        kwargs[dependency_name] = object()
+
+        with pytest.raises(
+            ValueError,
+            match=(
+                f"{dependency_name} must provide callable "
+                rf"{method_name}\(\)"
+            )
+        ):
+            SelfVerifyingRAG(
+                **kwargs,
+                retrieval_k=2,
+                rerank_k=1
+            )
+
+
+@pytest.mark.parametrize(
+    "threshold_name",
+    [
+        "pass_threshold",
+        "fail_threshold"
+    ]
+)
+@pytest.mark.parametrize(
+    "invalid_value",
+    [
+        True,
+        False,
+        "0.9",
+        None
+    ]
+)
+def test_non_numeric_thresholds_are_rejected(
+    threshold_name,
+    invalid_value
+):
+    pipeline, _, _ = build_pipeline(
+        "Hypertension is associated with persistently "
+        "elevated blood pressure [C1]."
+    )
+
+    kwargs = {
+        "retriever": pipeline.retriever,
+        "reranker": pipeline.reranker,
+        "context_builder": pipeline.context_builder,
+        "generator": pipeline.generator,
+        "nli_provider": pipeline.nli_provider,
+        "retrieval_k": 2,
+        "rerank_k": 1
+    }
+
+    kwargs[threshold_name] = invalid_value
+
+    with pytest.raises(
+        ValueError,
+        match=f"{threshold_name} must be numeric"
+    ):
+        SelfVerifyingRAG(
+            **kwargs
+        )
+
+
+@pytest.mark.parametrize(
+    "threshold_name",
+    [
+        "pass_threshold",
+        "fail_threshold"
+    ]
+)
+@pytest.mark.parametrize(
+    "invalid_value",
+    [
+        -0.01,
+        1.01
+    ]
+)
+def test_out_of_range_thresholds_are_rejected(
+    threshold_name,
+    invalid_value
+):
+    pipeline, _, _ = build_pipeline(
+        "Hypertension is associated with persistently "
+        "elevated blood pressure [C1]."
+    )
+
+    kwargs = {
+        "retriever": pipeline.retriever,
+        "reranker": pipeline.reranker,
+        "context_builder": pipeline.context_builder,
+        "generator": pipeline.generator,
+        "nli_provider": pipeline.nli_provider,
+        "retrieval_k": 2,
+        "rerank_k": 1
+    }
+
+    kwargs[threshold_name] = invalid_value
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            f"{threshold_name} must be between 0 and 1"
+        )
+    ):
+        SelfVerifyingRAG(
+            **kwargs
+        )
+
+
+@pytest.mark.parametrize(
+    "threshold",
+    [
+        0,
+        0.0,
+        0.5,
+        1,
+        1.0
+    ]
+)
+def test_valid_threshold_boundaries_are_accepted(
+    threshold
+):
+    pipeline, _, _ = build_pipeline(
+        "Hypertension is associated with persistently "
+        "elevated blood pressure [C1]."
+    )
+
+    hardened_pipeline = SelfVerifyingRAG(
+        retriever=pipeline.retriever,
+        reranker=pipeline.reranker,
+        context_builder=pipeline.context_builder,
+        generator=pipeline.generator,
+        nli_provider=pipeline.nli_provider,
+        retrieval_k=2,
+        rerank_k=1,
+        pass_threshold=threshold,
+        fail_threshold=threshold
+    )
+
+    assert hardened_pipeline.pass_threshold == float(
+        threshold
+    )
+    assert hardened_pipeline.fail_threshold == float(
+        threshold
+    )
