@@ -1,6 +1,14 @@
 from verifier import RAGVerifier
 
 
+class OrchestratorStageError(RuntimeError):
+    def __init__(self, stage):
+        self.stage = stage
+        super().__init__(
+            f"{stage} stage failed"
+        )
+
+
 class SelfVerifyingRAG:
     def __init__(
         self,
@@ -252,46 +260,66 @@ class SelfVerifyingRAG:
                 "question must be a non-empty string"
             )
 
-        candidates = self.retriever.retrieve(
-            question,
-            top_k=self.retrieval_k
-        )
+        try:
+            candidates = self.retriever.retrieve(
+                question,
+                top_k=self.retrieval_k
+            )
+        except Exception as exc:
+            raise OrchestratorStageError(
+                "retriever"
+            ) from exc
 
         self._validate_retriever_output(
             candidates
         )
 
-        reranked = self.reranker.rerank(
-            question,
-            candidates,
-            top_k=self.rerank_k
-        )
+        try:
+            reranked = self.reranker.rerank(
+                question,
+                candidates,
+                top_k=self.rerank_k
+            )
+        except Exception as exc:
+            raise OrchestratorStageError(
+                "reranker"
+            ) from exc
 
         self._validate_reranker_output(
             reranked
         )
 
-        context_result = (
-            self.context_builder.build(
-                reranked
+        try:
+            context_result = (
+                self.context_builder.build(
+                    reranked
+                )
             )
-        )
+        except Exception as exc:
+            raise OrchestratorStageError(
+                "context_builder"
+            ) from exc
 
         self._validate_context_builder_output(
             context_result
         )
 
-        generation_result = (
-            self.generator.generate(
-                question=question,
-                context=context_result["context"],
-                citation_map=(
-                    context_result[
-                        "citation_map"
-                    ]
+        try:
+            generation_result = (
+                self.generator.generate(
+                    question=question,
+                    context=context_result["context"],
+                    citation_map=(
+                        context_result[
+                            "citation_map"
+                        ]
+                    )
                 )
             )
-        )
+        except Exception as exc:
+            raise OrchestratorStageError(
+                "generator"
+            ) from exc
 
         self._validate_generator_output(
             generation_result
@@ -303,21 +331,26 @@ class SelfVerifyingRAG:
             ]
         )
 
-        verifier = self.verifier_factory(
-            chunks=citation_map,
-            retrieved_ids=(
-                citation_map.keys()
-            ),
-            pass_threshold=(
-                self.pass_threshold
-            ),
-            fail_threshold=(
-                self.fail_threshold
-            ),
-            nli_provider=(
-                self.nli_provider
+        try:
+            verifier = self.verifier_factory(
+                chunks=citation_map,
+                retrieved_ids=(
+                    citation_map.keys()
+                ),
+                pass_threshold=(
+                    self.pass_threshold
+                ),
+                fail_threshold=(
+                    self.fail_threshold
+                ),
+                nli_provider=(
+                    self.nli_provider
+                )
             )
-        )
+        except Exception as exc:
+            raise OrchestratorStageError(
+                "verifier"
+            ) from exc
 
         verify_answer = getattr(
             verifier,
@@ -331,13 +364,18 @@ class SelfVerifyingRAG:
                 "with callable verify_answer"
             )
 
-        verification = (
-            verify_answer(
-                generation_result[
-                    "answer"
-                ]
+        try:
+            verification = (
+                verify_answer(
+                    generation_result[
+                        "answer"
+                    ]
+                )
             )
-        )
+        except Exception as exc:
+            raise OrchestratorStageError(
+                "verifier"
+            ) from exc
 
         self._validate_verifier_output(
             verification
