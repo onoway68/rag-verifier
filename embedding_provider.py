@@ -40,19 +40,55 @@ class SentenceTransformerEmbeddingProvider:
         )
 
     def encode(self, texts):
-        return self.encode_documents(texts)
+        return self._encode_with_method(
+            texts,
+            "encode"
+        )
 
     def encode_queries(self, texts):
-        return self._encode(texts)
+        if (
+            type(self).encode
+            is not
+            SentenceTransformerEmbeddingProvider.encode
+        ):
+            return self.encode(texts)
+
+        return self._encode_with_method(
+            texts,
+            "encode_query"
+        )
 
     def encode_documents(self, texts):
-        return self._encode(texts)
+        if (
+            type(self).encode
+            is not
+            SentenceTransformerEmbeddingProvider.encode
+        ):
+            return self.encode(texts)
 
-    def _encode(self, texts):
+        return self._encode_with_method(
+            texts,
+            "encode_document"
+        )
+
+    def _encode_with_method(
+        self,
+        texts,
+        method_name
+    ):
         if isinstance(texts, str):
             texts = [texts]
 
-        embeddings = self.model.encode(
+        method = getattr(
+            self.model,
+            method_name,
+            None
+        )
+
+        if not callable(method):
+            method = self.model.encode
+
+        embeddings = method(
             texts,
             normalize_embeddings=True
         )
