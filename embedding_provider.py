@@ -14,6 +14,12 @@ class FakeEmbeddingProvider:
             for text in texts
         ]
 
+    def encode_queries(self, texts):
+        return self.encode(texts)
+
+    def encode_documents(self, texts):
+        return self.encode(texts)
+
 
 class SentenceTransformerEmbeddingProvider:
     def __init__(
@@ -34,6 +40,15 @@ class SentenceTransformerEmbeddingProvider:
         )
 
     def encode(self, texts):
+        return self.encode_documents(texts)
+
+    def encode_queries(self, texts):
+        return self._encode(texts)
+
+    def encode_documents(self, texts):
+        return self._encode(texts)
+
+    def _encode(self, texts):
         if isinstance(texts, str):
             texts = [texts]
 
