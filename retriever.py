@@ -109,6 +109,34 @@ class Retriever:
             norm_a * norm_b
         )
 
+    def _encode_queries(self, texts):
+        method = getattr(
+            self.embedding_provider,
+            "encode_queries",
+            None
+        )
+
+        if callable(method):
+            return method(texts)
+
+        return self.embedding_provider.encode(
+            texts
+        )
+
+    def _encode_documents(self, texts):
+        method = getattr(
+            self.embedding_provider,
+            "encode_documents",
+            None
+        )
+
+        if callable(method):
+            return method(texts)
+
+        return self.embedding_provider.encode(
+            texts
+        )
+
     def retrieve(
         self,
         query,
@@ -130,7 +158,7 @@ class Retriever:
         ]
 
         query_vectors = (
-            self.embedding_provider.encode(
+            self._encode_queries(
                 [query]
             )
         )
@@ -143,7 +171,7 @@ class Retriever:
         query_vector = query_vectors[0]
 
         chunk_vectors = (
-            self.embedding_provider.encode(
+            self._encode_documents(
                 chunk_texts
             )
         )
