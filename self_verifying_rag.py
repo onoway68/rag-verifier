@@ -1,3 +1,4 @@
+from release_policy import ReleasePolicy
 from verifier import RAGVerifier
 
 
@@ -21,7 +22,8 @@ class SelfVerifyingRAG:
         rerank_k=3,
         pass_threshold=0.90,
         fail_threshold=0.90,
-        verifier_factory=RAGVerifier
+        verifier_factory=RAGVerifier,
+        release_policy=None
     ):
         for name, value in (
             ("retrieval_k", retrieval_k),
@@ -121,6 +123,22 @@ class SelfVerifyingRAG:
             )
 
         self.verifier_factory = verifier_factory
+
+        if release_policy is None:
+            release_policy = ReleasePolicy()
+
+        decide = getattr(
+            release_policy,
+            "decide",
+            None
+        )
+
+        if not callable(decide):
+            raise ValueError(
+                "release_policy must provide callable decide()"
+            )
+
+        self.release_policy = release_policy
 
         self.retrieval_k = retrieval_k
         self.rerank_k = rerank_k
@@ -246,6 +264,84 @@ class SelfVerifyingRAG:
             raise ValueError(
                 "verifier status and trusted_release "
                 "are inconsistent"
+            )
+
+    @staticmethod
+    def _validate_release_policy_output(output):
+        if not isinstance(output, dict):
+            raise ValueError(
+                "release_policy output must be a dict"
+            )
+
+        for key in (
+            "action",
+            "releasable",
+            "reason"
+        ):
+            if key not in output:
+                raise ValueError(
+                    "release_policy output "
+                    f"must contain {key}"
+                )
+
+        action = output["action"]
+        releasable = output["releasable"]
+        reason = output["reason"]
+
+        if action not in (
+            "RELEASE",
+            "HOLD_FOR_REVIEW",
+            "BLOCK"
+        ):
+            raise ValueError(
+                "release_policy action must be "
+                "RELEASE, HOLD_FOR_REVIEW, or BLOCK"
+            )
+
+        if not isinstance(releasable, bool):
+            raise ValueError(
+                "release_policy releasable "
+                "must be a bool"
+            )
+
+        if (
+            not isinstance(reason, str)
+            or not reason.strip()
+        ):
+            raise ValueError(
+                "release_policy reason "
+                "must be a non-empty string"
+            )
+
+        expected = {
+            "RELEASE": (
+                True,
+                "VERIFICATION_PASSED"
+            ),
+            "HOLD_FOR_REVIEW": (
+                False,
+                "VERIFICATION_REQUIRES_REVIEW"
+            ),
+            "BLOCK": (
+                False,
+                "VERIFICATION_FAILED"
+            )
+        }
+
+        expected_releasable, expected_reason = (
+            expected[action]
+        )
+
+        if releasable != expected_releasable:
+            raise ValueError(
+                "release_policy action and "
+                "releasable are inconsistent"
+            )
+
+        if reason != expected_reason:
+            raise ValueError(
+                "release_policy action and "
+                "reason are inconsistent"
             )
 
     def run(
@@ -381,6 +477,21 @@ class SelfVerifyingRAG:
             verification
         )
 
+        try:
+            release_decision = (
+                self.release_policy.decide(
+                    verification
+                )
+            )
+        except Exception as exc:
+            raise OrchestratorStageError(
+                "release_policy"
+            ) from exc
+
+        self._validate_release_policy_output(
+            release_decision
+        )
+
         return {
             "question": question,
             "retrieval": candidates,
@@ -388,9 +499,10 @@ class SelfVerifyingRAG:
             "context": context_result,
             "generation": generation_result,
             "verification": verification,
+            "release_decision": release_decision,
             "trusted_release": (
-                verification[
-                    "trusted_release"
+                release_decision[
+                    "releasable"
                 ]
             )
         }
