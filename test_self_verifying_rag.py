@@ -1263,3 +1263,356 @@ def test_run_wraps_verifier_factory_exception():
     assert str(
         exc_info.value.__cause__
     ) == "verifier construction exploded"
+
+
+class FakeReleasePolicy:
+    def __init__(self, decision):
+        self.decision = decision
+        self.received = None
+
+    def decide(self, verification):
+        self.received = verification
+        return self.decision
+
+
+class RaisingReleasePolicy:
+    def decide(self, verification):
+        raise RuntimeError("policy unavailable")
+
+
+def build_release_policy_pipeline(
+    policy,
+    answer=(
+        "Hypertension is characterized by "
+        "persistently elevated blood pressure. [C1]"
+    )
+):
+    pipeline, question, chunks = build_pipeline(
+        answer
+    )
+
+    pipeline.release_policy = policy
+
+    return (
+        pipeline,
+        question,
+        chunks
+    )
+
+
+def test_orchestrator_applies_release_policy():
+    policy = FakeReleasePolicy({
+        "action": "RELEASE",
+        "releasable": True,
+        "reason": "VERIFICATION_PASSED"
+    })
+
+    pipeline, question, _ = (
+        build_release_policy_pipeline(
+            policy
+        )
+    )
+
+    result = pipeline.run(question)
+
+    assert result["release_decision"] == {
+        "action": "RELEASE",
+        "releasable": True,
+        "reason": "VERIFICATION_PASSED"
+    }
+
+    assert (
+        policy.received
+        is result["verification"]
+    )
+
+
+def test_orchestrator_uses_policy_releasability():
+    policy = FakeReleasePolicy({
+        "action": "HOLD_FOR_REVIEW",
+        "releasable": False,
+        "reason": "VERIFICATION_REQUIRES_REVIEW"
+    })
+
+    pipeline, question, _ = (
+        build_release_policy_pipeline(
+            policy
+        )
+    )
+
+    result = pipeline.run(question)
+
+    assert result["trusted_release"] is False
+
+
+def test_release_policy_runtime_failure_is_stage_error():
+    pipeline, question, _ = (
+        build_release_policy_pipeline(
+            RaisingReleasePolicy()
+        )
+    )
+
+    with pytest.raises(
+        OrchestratorStageError
+    ) as exc_info:
+        pipeline.run(question)
+
+    assert exc_info.value.stage == "release_policy"
+
+
+@pytest.mark.parametrize(
+    "decision",
+    [
+        None,
+        {},
+        {
+            "action": "RELEASE",
+            "releasable": True
+        },
+        {
+            "action": "UNKNOWN",
+            "releasable": False,
+            "reason": "INVALID"
+        },
+        {
+            "action": "RELEASE",
+            "releasable": "yes",
+            "reason": "VERIFICATION_PASSED"
+        },
+    ]
+)
+def test_malformed_release_policy_output_is_rejected(
+    decision
+):
+    policy = FakeReleasePolicy(
+        decision
+    )
+
+    pipeline, question, _ = (
+        build_release_policy_pipeline(
+            policy
+        )
+    )
+
+    with pytest.raises(ValueError):
+        pipeline.run(question)
+
+
+class StaticVerifier:
+    def __init__(self, verification):
+        self.verification = verification
+
+    def verify_answer(self, answer):
+        return dict(self.verification)
+
+
+def test_invalid_release_policy_dependency_is_rejected():
+    pipeline, _, _ = build_pipeline(
+        (
+            "Hypertension is characterized by "
+            "persistently elevated blood pressure. [C1]"
+        )
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "release_policy must provide "
+            r"callable decide\(\)"
+        )
+    ):
+        SelfVerifyingRAG(
+            retriever=pipeline.retriever,
+            reranker=pipeline.reranker,
+            context_builder=(
+                pipeline.context_builder
+            ),
+            generator=pipeline.generator,
+            nli_provider=pipeline.nli_provider,
+            retrieval_k=pipeline.retrieval_k,
+            rerank_k=pipeline.rerank_k,
+            pass_threshold=(
+                pipeline.pass_threshold
+            ),
+            fail_threshold=(
+                pipeline.fail_threshold
+            ),
+            verifier_factory=(
+                pipeline.verifier_factory
+            ),
+            release_policy=object()
+        )
+
+
+@pytest.mark.parametrize(
+    (
+        "status",
+        "trusted_release",
+        "expected_decision"
+    ),
+    [
+        (
+            "PASS",
+            True,
+            {
+                "action": "RELEASE",
+                "releasable": True,
+                "reason": "VERIFICATION_PASSED"
+            }
+        ),
+        (
+            "REVIEW",
+            False,
+            {
+                "action": "HOLD_FOR_REVIEW",
+                "releasable": False,
+                "reason": (
+                    "VERIFICATION_REQUIRES_REVIEW"
+                )
+            }
+        ),
+        (
+            "FAIL",
+            False,
+            {
+                "action": "BLOCK",
+                "releasable": False,
+                "reason": "VERIFICATION_FAILED"
+            }
+        ),
+    ]
+)
+def test_default_release_policy_maps_verification_status(
+    status,
+    trusted_release,
+    expected_decision
+):
+    pipeline, question, _ = build_pipeline(
+        (
+            "Hypertension is characterized by "
+            "persistently elevated blood pressure. [C1]"
+        )
+    )
+
+    verification = {
+        "status": status,
+        "trusted_release": trusted_release
+    }
+
+    pipeline.verifier_factory = (
+        lambda **kwargs: StaticVerifier(
+            verification
+        )
+    )
+
+    result = pipeline.run(question)
+
+    assert (
+        result["release_decision"]
+        == expected_decision
+    )
+
+    assert (
+        result["trusted_release"]
+        is expected_decision["releasable"]
+    )
+
+
+@pytest.mark.parametrize(
+    "decision,error_pattern",
+    [
+        (
+            {
+                "action": "RELEASE",
+                "releasable": False,
+                "reason": "VERIFICATION_PASSED"
+            },
+            (
+                "release_policy action and "
+                "releasable are inconsistent"
+            )
+        ),
+        (
+            {
+                "action": "BLOCK",
+                "releasable": True,
+                "reason": "CUSTOM_POLICY_REASON"
+            },
+            (
+                "release_policy action and "
+                "releasable are inconsistent"
+            )
+        ),
+    ]
+)
+def test_inconsistent_release_policy_decision_is_rejected(
+    decision,
+    error_pattern
+):
+    policy = FakeReleasePolicy(
+        decision
+    )
+
+    pipeline, question, _ = (
+        build_release_policy_pipeline(
+            policy
+        )
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=error_pattern
+    ):
+        pipeline.run(question)
+
+
+def test_custom_policy_reason_is_accepted():
+    policy = FakeReleasePolicy({
+        "action": "HOLD_FOR_REVIEW",
+        "releasable": False,
+        "reason": (
+            "HIGH_RISK_DOMAIN_REQUIRES_HUMAN_REVIEW"
+        )
+    })
+
+    pipeline, question, _ = (
+        build_release_policy_pipeline(
+            policy
+        )
+    )
+
+    result = pipeline.run(question)
+
+    assert result["release_decision"] == {
+        "action": "HOLD_FOR_REVIEW",
+        "releasable": False,
+        "reason": (
+            "HIGH_RISK_DOMAIN_REQUIRES_HUMAN_REVIEW"
+        )
+    }
+
+    assert result["trusted_release"] is False
+
+
+def test_custom_block_reason_is_accepted():
+    policy = FakeReleasePolicy({
+        "action": "BLOCK",
+        "releasable": False,
+        "reason": "TENANT_POLICY_BLOCK"
+    })
+
+    pipeline, question, _ = (
+        build_release_policy_pipeline(
+            policy
+        )
+    )
+
+    result = pipeline.run(question)
+
+    assert result["release_decision"] == {
+        "action": "BLOCK",
+        "releasable": False,
+        "reason": "TENANT_POLICY_BLOCK"
+    }
+
+    assert result["trusted_release"] is False
