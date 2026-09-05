@@ -203,7 +203,7 @@ class HealthcareRetrievalBenchmark:
             per_query.append({
                 "query_id": query_id,
                 "retrieved_ids": retrieved_ids,
-                "relevant_ids": relevant_ids,
+                "relevant_ids": list(relevant_ids),
                 "recall_at_k": recall_at_k,
                 "reciprocal_rank": reciprocal_rank,
                 "precision_at_k": precision_at_k
