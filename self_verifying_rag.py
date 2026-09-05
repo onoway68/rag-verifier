@@ -313,35 +313,16 @@ class SelfVerifyingRAG:
                 "must be a non-empty string"
             )
 
-        expected = {
-            "RELEASE": (
-                True,
-                "VERIFICATION_PASSED"
-            ),
-            "HOLD_FOR_REVIEW": (
-                False,
-                "VERIFICATION_REQUIRES_REVIEW"
-            ),
-            "BLOCK": (
-                False,
-                "VERIFICATION_FAILED"
-            )
-        }
-
-        expected_releasable, expected_reason = (
-            expected[action]
-        )
+        expected_releasable = {
+            "RELEASE": True,
+            "HOLD_FOR_REVIEW": False,
+            "BLOCK": False
+        }[action]
 
         if releasable != expected_releasable:
             raise ValueError(
                 "release_policy action and "
                 "releasable are inconsistent"
-            )
-
-        if reason != expected_reason:
-            raise ValueError(
-                "release_policy action and "
-                "reason are inconsistent"
             )
 
     def run(

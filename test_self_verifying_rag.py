@@ -1535,12 +1535,12 @@ def test_default_release_policy_maps_verification_status(
         (
             {
                 "action": "BLOCK",
-                "releasable": False,
-                "reason": "VERIFICATION_PASSED"
+                "releasable": True,
+                "reason": "CUSTOM_POLICY_REASON"
             },
             (
                 "release_policy action and "
-                "reason are inconsistent"
+                "releasable are inconsistent"
             )
         ),
     ]
@@ -1564,3 +1564,55 @@ def test_inconsistent_release_policy_decision_is_rejected(
         match=error_pattern
     ):
         pipeline.run(question)
+
+
+def test_custom_policy_reason_is_accepted():
+    policy = FakeReleasePolicy({
+        "action": "HOLD_FOR_REVIEW",
+        "releasable": False,
+        "reason": (
+            "HIGH_RISK_DOMAIN_REQUIRES_HUMAN_REVIEW"
+        )
+    })
+
+    pipeline, question, _ = (
+        build_release_policy_pipeline(
+            policy
+        )
+    )
+
+    result = pipeline.run(question)
+
+    assert result["release_decision"] == {
+        "action": "HOLD_FOR_REVIEW",
+        "releasable": False,
+        "reason": (
+            "HIGH_RISK_DOMAIN_REQUIRES_HUMAN_REVIEW"
+        )
+    }
+
+    assert result["trusted_release"] is False
+
+
+def test_custom_block_reason_is_accepted():
+    policy = FakeReleasePolicy({
+        "action": "BLOCK",
+        "releasable": False,
+        "reason": "TENANT_POLICY_BLOCK"
+    })
+
+    pipeline, question, _ = (
+        build_release_policy_pipeline(
+            policy
+        )
+    )
+
+    result = pipeline.run(question)
+
+    assert result["release_decision"] == {
+        "action": "BLOCK",
+        "releasable": False,
+        "reason": "TENANT_POLICY_BLOCK"
+    }
+
+    assert result["trusted_release"] is False
