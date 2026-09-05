@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 
 from healthcare_retrieval_benchmark import (
     HealthcareRetrievalBenchmark
@@ -54,18 +54,9 @@ def test_benchmark_computes_recall_mrr_and_precision():
     result = benchmark.evaluate(queries)
 
     assert result["query_count"] == 2
-
-    assert result["recall_at_k"] == pytest.approx(
-        1.0
-    )
-
-    assert result["mrr"] == pytest.approx(
-        0.75
-    )
-
-    assert result["precision_at_k"] == pytest.approx(
-        0.5
-    )
+    assert result["recall_at_k"] == pytest.approx(1.0)
+    assert result["mrr"] == pytest.approx(0.75)
+    assert result["precision_at_k"] == pytest.approx(0.5)
 
 
 def test_benchmark_reports_per_query_results():
@@ -92,13 +83,8 @@ def test_benchmark_reports_per_query_results():
     assert result["queries"] == [
         {
             "query_id": "Q1",
-            "retrieved_ids": [
-                "DOC-HTN",
-                "DOC-DM"
-            ],
-            "relevant_ids": [
-                "DOC-HTN"
-            ],
+            "retrieved_ids": ["DOC-HTN", "DOC-DM"],
+            "relevant_ids": ["DOC-HTN"],
             "recall_at_k": 1.0,
             "reciprocal_rank": 1.0,
             "precision_at_k": 0.5
@@ -108,17 +94,9 @@ def test_benchmark_reports_per_query_results():
 
 @pytest.mark.parametrize(
     "invalid_top_k",
-    [
-        0,
-        -1,
-        True,
-        1.5,
-        "2"
-    ]
+    [0, -1, True, 1.5, "2"]
 )
-def test_invalid_top_k_is_rejected(
-    invalid_top_k
-):
+def test_invalid_top_k_is_rejected(invalid_top_k):
     with pytest.raises(
         ValueError,
         match="top_k must be a positive integer"
@@ -145,16 +123,9 @@ def test_retriever_contract_is_required():
 
 @pytest.mark.parametrize(
     "queries",
-    [
-        None,
-        {},
-        "invalid",
-        []
-    ]
+    [None, {}, "invalid", []]
 )
-def test_queries_must_be_non_empty_list(
-    queries
-):
+def test_queries_must_be_non_empty_list(queries):
     benchmark = HealthcareRetrievalBenchmark(
         retriever=StaticRetriever({}),
         top_k=2
@@ -198,14 +169,37 @@ def test_invalid_query_contract_is_rejected(query):
         benchmark.evaluate([query])
 
 
+def test_duplicate_query_ids_are_rejected():
+    queries = [
+        {
+            "query_id": "Q1",
+            "text": "Question one",
+            "relevant_ids": ["DOC-1"]
+        },
+        {
+            "query_id": "Q1",
+            "text": "Question two",
+            "relevant_ids": ["DOC-2"]
+        }
+    ]
+
+    benchmark = HealthcareRetrievalBenchmark(
+        retriever=StaticRetriever({}),
+        top_k=2
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="query_ids must be unique"
+    ):
+        benchmark.evaluate(queries)
+
+
 def test_duplicate_relevant_ids_are_rejected():
     query = {
         "query_id": "Q1",
         "text": "Question",
-        "relevant_ids": [
-            "DOC-1",
-            "DOC-1"
-        ]
+        "relevant_ids": ["DOC-1", "DOC-1"]
     }
 
     benchmark = HealthcareRetrievalBenchmark(
@@ -292,6 +286,33 @@ def test_duplicate_retrieved_ids_are_rejected():
         benchmark.evaluate([query])
 
 
+def test_retriever_cannot_return_more_than_top_k():
+    class OverReturningRetriever:
+        def retrieve(self, query, top_k):
+            return [
+                {"chunk_id": "DOC-1"},
+                {"chunk_id": "DOC-2"},
+                {"chunk_id": "DOC-3"}
+            ]
+
+    benchmark = HealthcareRetrievalBenchmark(
+        retriever=OverReturningRetriever(),
+        top_k=2
+    )
+
+    query = {
+        "query_id": "Q1",
+        "text": "Question",
+        "relevant_ids": ["DOC-1"]
+    }
+
+    with pytest.raises(
+        ValueError,
+        match="retriever returned more than top_k results"
+    ):
+        benchmark.evaluate([query])
+
+
 def test_precision_at_k_uses_configured_k():
     retriever = StaticRetriever({
         "Question": [
@@ -312,6 +333,4 @@ def test_precision_at_k_uses_configured_k():
 
     result = benchmark.evaluate([query])
 
-    assert result["precision_at_k"] == pytest.approx(
-        0.5
-    )
+    assert result["precision_at_k"] == pytest.approx(0.5)

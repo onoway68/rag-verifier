@@ -1,4 +1,4 @@
-﻿class HealthcareRetrievalBenchmark:
+class HealthcareRetrievalBenchmark:
     def __init__(
         self,
         retriever,
@@ -138,11 +138,20 @@
                 "queries must be a non-empty list"
             )
 
-        per_query = []
+        query_ids = []
 
         for query in queries:
             self._validate_query(query)
+            query_ids.append(query["query_id"])
 
+        if len(set(query_ids)) != len(query_ids):
+            raise ValueError(
+                "query_ids must be unique"
+            )
+
+        per_query = []
+
+        for query in queries:
             text = query["text"]
             query_id = query["query_id"]
             relevant_ids = query["relevant_ids"]
@@ -155,6 +164,11 @@
             retrieved_ids = (
                 self._validate_retrieved(retrieved)
             )
+
+            if len(retrieved_ids) > self.top_k:
+                raise ValueError(
+                    "retriever returned more than top_k results"
+                )
 
             relevant_set = set(relevant_ids)
 
