@@ -1,4 +1,4 @@
-﻿import math
+import math
 
 
 class ModelQualificationPolicy:
@@ -17,10 +17,7 @@ class ModelQualificationPolicy:
                 "thresholds must be non-empty dicts"
             )
 
-        if (
-            set(pass_thresholds)
-            != set(review_thresholds)
-        ):
+        if set(pass_thresholds) != set(review_thresholds):
             raise ValueError(
                 "pass and review thresholds must "
                 "use the same metrics"
@@ -55,12 +52,8 @@ class ModelQualificationPolicy:
                     "or equal to review threshold"
                 )
 
-        self.pass_thresholds = dict(
-            pass_thresholds
-        )
-        self.review_thresholds = dict(
-            review_thresholds
-        )
+        self.pass_thresholds = dict(pass_thresholds)
+        self.review_thresholds = dict(review_thresholds)
 
     def decide(self, metrics):
         if not isinstance(metrics, dict):
@@ -68,14 +61,8 @@ class ModelQualificationPolicy:
                 "qualification metrics must be a dict"
             )
 
-        required_metrics = set(
-            self.pass_thresholds
-        )
-
-        missing = (
-            required_metrics
-            - set(metrics)
-        )
+        required_metrics = set(self.pass_thresholds)
+        missing = required_metrics - set(metrics)
 
         if missing:
             raise ValueError(
@@ -87,10 +74,7 @@ class ModelQualificationPolicy:
 
             if (
                 isinstance(value, bool)
-                or not isinstance(
-                    value,
-                    (int, float)
-                )
+                or not isinstance(value, (int, float))
                 or not math.isfinite(value)
                 or value < 0.0
                 or value > 1.0
@@ -101,48 +85,36 @@ class ModelQualificationPolicy:
                 )
 
         passes = all(
-            metrics[metric]
-            >= self.pass_thresholds[metric]
+            metrics[metric] >= self.pass_thresholds[metric]
             for metric in required_metrics
         )
 
         if passes:
             return {
                 "status": "PASS",
-                "reason": (
-                    "QUALIFICATION_THRESHOLDS_SATISFIED"
-                )
+                "reason": "QUALIFICATION_THRESHOLDS_SATISFIED"
             }
 
         reviews = all(
-            metrics[metric]
-            >= self.review_thresholds[metric]
+            metrics[metric] >= self.review_thresholds[metric]
             for metric in required_metrics
         )
 
         if reviews:
             return {
                 "status": "REVIEW",
-                "reason": (
-                    "PASS_THRESHOLDS_NOT_SATISFIED"
-                )
+                "reason": "PASS_THRESHOLDS_NOT_SATISFIED"
             }
 
         return {
             "status": "FAIL",
-            "reason": (
-                "REVIEW_THRESHOLDS_NOT_SATISFIED"
-            )
+            "reason": "REVIEW_THRESHOLDS_NOT_SATISFIED"
         }
 
 
 class ModelQualificationRecordBuilder:
     def __init__(self, policy):
-        decide = getattr(
-            policy,
-            "decide",
-            None
-        )
+        decide = getattr(policy, "decide", None)
 
         if not callable(decide):
             raise ValueError(
@@ -152,10 +124,7 @@ class ModelQualificationRecordBuilder:
         self.policy = policy
 
     @staticmethod
-    def _validate_non_empty_string(
-        value,
-        field_name
-    ):
+    def _validate_non_empty_string(value, field_name):
         if (
             not isinstance(value, str)
             or not value.strip()
@@ -165,10 +134,7 @@ class ModelQualificationRecordBuilder:
             )
 
     @staticmethod
-    def _validate_positive_integer(
-        value,
-        field_name
-    ):
+    def _validate_positive_integer(value, field_name):
         if (
             isinstance(value, bool)
             or not isinstance(value, int)
@@ -179,16 +145,10 @@ class ModelQualificationRecordBuilder:
             )
 
     @staticmethod
-    def _validate_metric_value(
-        value,
-        field_name
-    ):
+    def _validate_metric_value(value, field_name):
         if (
             isinstance(value, bool)
-            or not isinstance(
-                value,
-                (int, float)
-            )
+            or not isinstance(value, (int, float))
             or not math.isfinite(value)
             or value < 0.0
             or value > 1.0
@@ -205,10 +165,7 @@ class ModelQualificationRecordBuilder:
                 "qualification output is invalid"
             )
 
-        required = {
-            "status",
-            "reason"
-        }
+        required = {"status", "reason"}
 
         if not required.issubset(output):
             raise ValueError(
@@ -218,11 +175,10 @@ class ModelQualificationRecordBuilder:
         status = output["status"]
         reason = output["reason"]
 
-        if status not in {
-            "PASS",
-            "REVIEW",
-            "FAIL"
-        }:
+        if (
+            not isinstance(status, str)
+            or status not in {"PASS", "REVIEW", "FAIL"}
+        ):
             raise ValueError(
                 "qualification output is invalid"
             )
@@ -235,26 +191,15 @@ class ModelQualificationRecordBuilder:
                 "qualification output is invalid"
             )
 
-    def build(
-        self,
-        model,
-        benchmark,
-        metrics
-    ):
+    def build(self, model, benchmark, metrics):
         if not isinstance(model, dict):
-            raise ValueError(
-                "model must be a dict"
-            )
+            raise ValueError("model must be a dict")
 
         if not isinstance(benchmark, dict):
-            raise ValueError(
-                "benchmark must be a dict"
-            )
+            raise ValueError("benchmark must be a dict")
 
         if not isinstance(metrics, dict):
-            raise ValueError(
-                "metrics must be a dict"
-            )
+            raise ValueError("metrics must be a dict")
 
         required_model = {
             "model_id",
@@ -274,9 +219,7 @@ class ModelQualificationRecordBuilder:
             "top_k"
         }
 
-        if not required_benchmark.issubset(
-            benchmark
-        ):
+        if not required_benchmark.issubset(benchmark):
             raise ValueError(
                 "benchmark metadata is incomplete"
             )
@@ -289,82 +232,64 @@ class ModelQualificationRecordBuilder:
         }
 
         if not required_metrics.issubset(metrics):
-            raise ValueError(
-                "metrics are incomplete"
-            )
+            raise ValueError("metrics are incomplete")
 
         self._validate_non_empty_string(
             model["model_id"],
             "model_id"
         )
-
         self._validate_non_empty_string(
             model["model_revision"],
             "model_revision"
         )
-
         self._validate_non_empty_string(
             model["provider_type"],
             "provider_type"
         )
-
         self._validate_positive_integer(
             model["embedding_dimension"],
             "embedding_dimension"
         )
-
         self._validate_non_empty_string(
             benchmark["benchmark_id"],
             "benchmark_id"
         )
-
         self._validate_non_empty_string(
             benchmark["benchmark_version"],
             "benchmark_version"
         )
-
         self._validate_positive_integer(
             benchmark["top_k"],
             "top_k"
         )
-
         self._validate_positive_integer(
             metrics["query_count"],
             "query_count"
         )
-
         self._validate_metric_value(
             metrics["recall_at_k"],
             "recall_at_k"
         )
-
         self._validate_metric_value(
             metrics["mrr"],
             "mrr"
         )
-
         self._validate_metric_value(
             metrics["precision_at_k"],
             "precision_at_k"
         )
 
         qualification_metrics = {
-            "recall_at_k": metrics[
-                "recall_at_k"
-            ],
+            "recall_at_k": metrics["recall_at_k"],
             "mrr": metrics["mrr"],
-            "precision_at_k": metrics[
-                "precision_at_k"
-            ]
+            "precision_at_k": metrics["precision_at_k"]
         }
 
         qualification = self.policy.decide(
             qualification_metrics
         )
 
-        self._validate_qualification_output(
-            qualification
-        )
+        self._validate_qualification_output(qualification)
 
         qualification = {
             "status": qualification["status"],
@@ -374,36 +299,24 @@ class ModelQualificationRecordBuilder:
         return {
             "model": {
                 "model_id": model["model_id"],
-                "model_revision": model[
-                    "model_revision"
-                ],
-                "provider_type": model[
-                    "provider_type"
-                ],
+                "model_revision": model["model_revision"],
+                "provider_type": model["provider_type"],
                 "embedding_dimension": model[
                     "embedding_dimension"
                 ]
             },
             "benchmark": {
-                "benchmark_id": benchmark[
-                    "benchmark_id"
-                ],
+                "benchmark_id": benchmark["benchmark_id"],
                 "benchmark_version": benchmark[
                     "benchmark_version"
                 ],
                 "top_k": benchmark["top_k"],
-                "query_count": metrics[
-                    "query_count"
-                ]
+                "query_count": metrics["query_count"]
             },
             "metrics": {
-                "recall_at_k": metrics[
-                    "recall_at_k"
-                ],
+                "recall_at_k": metrics["recall_at_k"],
                 "mrr": metrics["mrr"],
-                "precision_at_k": metrics[
-                    "precision_at_k"
-                ]
+                "precision_at_k": metrics["precision_at_k"]
             },
             "qualification": qualification
         }
